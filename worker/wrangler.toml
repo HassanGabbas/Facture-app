@@ -1,0 +1,12 @@
+name = "rechnungs-app-ai"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+
+# Geheimnisse NICHT hier eintragen, sondern mit:
+#   npx wrangler secret put GEMINI_API_KEY
+#   npx wrangler secret put APP_TOKEN
+[vars]
+# Adresse(n) deiner App, damit nur sie den Proxy im Browser aufrufen dürfen (Komma-getrennt), z. B.:
+# ALLOWED_ORIGINS = "https://meine-rechnungs-app.pages.dev"
+# Anderes Modell wählen:
+# MODEL = "gemini-2.5-flash"

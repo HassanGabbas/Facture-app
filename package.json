@@ -1,0 +1,14 @@
+{
+  "name": "rechnungs-app",
+  "version": "1.0.0",
+  "description": "Offline-fähige Rechnungs- und Angebots-App (PWA) mit KI-Freitexteingabe",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test \"tests/*.test.js\"",
+    "build:prompt": "node scripts/build-prompt.js",
+    "build:single": "node scripts/build-single.mjs"
+  },
+  "license": "UNLICENSED"
+}
