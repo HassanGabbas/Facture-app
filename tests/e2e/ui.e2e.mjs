@@ -55,6 +55,14 @@ try {
   await page.click('#nav a[href="#/settings"]');
   await page.fill('[name=companyName]', 'Gazon Pro SARL');
   await page.fill('[name=companyAddress]', 'Rue 1, Casablanca');
+  await page.fill('[name=ice]', '001234567000089');
+  await page.fill('[name=ifNr]', '40123456');
+  await page.fill('[name=email]', 'info@gazon.ma');
+  // Logo hochladen (kleines PNG wird im Test erzeugt)
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC', 'base64');
+  await page.setInputFiles('#logoFile', { name: 'logo.png', mimeType: 'image/png', buffer: png });
+  await page.waitForSelector('#logoPreview img');
+  await page.selectOption('[name=logoPosition]', 'right');
   await page.selectOption('[name=currency]', 'MAD');
   await page.fill('[name=defaultTaxRate]', '20');
   await page.selectOption('[name=aiMode]', 'proxy');
@@ -115,6 +123,23 @@ try {
   assert.match(sheet, /16\.584,00/);
   assert.match(sheet, /Gazon Pro SARL/);
   assert.equal(await page.$('.wm'), null);
+  // Kopf: nur Name + Logo rechts, keine ICE/IF/Adresse oben
+  const headText = await page.textContent('.brand');
+  assert.match(headText, /Gazon Pro SARL/);
+  assert.doesNotMatch(headText, /ICE|IF|Rue 1/);
+  assert.ok(await page.$('.brand.right img.logo'));
+  const order = await page.$eval('.brand', (el) => [...el.children].map((c) => c.className));
+  assert.deepEqual(order, ['brand-name', 'logo']);
+  // Fußnote: Firmendaten klein (7 pt)
+  const foot = await page.textContent('.foot');
+  assert.match(foot, /Gazon Pro SARL/);
+  assert.match(foot, /Rue 1, Casablanca/);
+  assert.match(foot, /ICE: 001234567000089/);
+  assert.match(foot, /IF: 40123456/);
+  const footPx = parseFloat(await page.$eval('.foot', (el) => getComputedStyle(el).fontSize));
+  assert.ok(Math.abs(footPx - (7 * 96) / 72) < 0.05, `Fußnote ${footPx}px statt 7pt`);
+  // Rabatt-Spalte standardmäßig nicht vorhanden
+  assert.doesNotMatch(await page.textContent('.items thead'), /Rabatt/);
   await page.screenshot({ path: join(OUT, '2-vorschau.png'), fullPage: true });
   ok('Rechnung fertiggestellt: Nummer RE-…-0001, Summen 13.820,00 / 2.764,00 / 16.584,00 MAD');
 
@@ -135,6 +160,10 @@ try {
   // 9. Angebot von Hand, ohne KI
   await page.goto(`${BASE}/#/new/quote`);
   await page.fill('[data-f="customer.name"]', 'Café Médina');
+  await page.fill('[data-f="customer.ice"]', '555000111');
+  assert.equal(await page.$('[data-line="0"][data-f="discount"]'), null); // ohne Schalter kein Rabattfeld
+  await page.check('[data-toggle-discount]');
+  await page.waitForSelector('[data-line="0"][data-f="discount"]');
   await page.fill('[data-line="0"][data-f="name"]', 'Beratung');
   await page.fill('[data-line="0"][data-f="qty"]', '2,5');
   await page.fill('[data-line="0"][data-f="unit"]', 'Std');
@@ -148,7 +177,31 @@ try {
   await page.waitForURL(/#\/preview\//);
   assert.match(await page.textContent('#sheet'), /AN-\d{4}-0001/);
   assert.match(await page.textContent('#sheet'), /Gültig bis/);
+  assert.match(await page.textContent('.docrow'), /ICE: 555000111/);
+  assert.match(await page.textContent('.items thead'), /Rabatt/);
+  assert.match(await page.textContent('.items tbody'), /10 %/);
   ok('Angebot von Hand: Rabatt %, Standardsteuersatz, Nummer AN-…-0001, ohne Fälligkeitsdatum');
+
+  // 9b. Logo oberhalb des Firmennamens
+  const quoteHash = await page.evaluate(() => location.hash);
+  await page.goto(`${BASE}/#/settings`);
+  await page.selectOption('[name=logoPosition]', 'above');
+  await page.click('#settingsForm button[type=submit]');
+  await page.waitForSelector('.toast.show.ok');
+  await page.goto(`${BASE}/${quoteHash}`);
+  await page.waitForSelector('.brand.above');
+  assert.deepEqual(await page.$eval('.brand', (el) => [...el.children].map((c) => c.className)), ['logo', 'brand-name']);
+  await page.screenshot({ path: join(OUT, '3-vorschau-logo-oben.png'), fullPage: true });
+  ok('Logo-Position "über dem Firmennamen" funktioniert');
+
+  // 9c. Rabatt-Spalte ausschalten entfernt die Rabatte (mit Rückfrage)
+  const quoteId = quoteHash.split('/').pop();
+  await page.goto(`${BASE}/#/edit/${quoteId}`);
+  await page.waitForSelector('[data-toggle-discount]');
+  await page.uncheck('[data-toggle-discount]');
+  await page.waitForFunction(() => !document.querySelector('[data-line="0"][data-f="discount"]'));
+  assert.match(await page.textContent('#totals'), /240,00/); // 2,5×80 = 200 netto + 20 % = 240 ohne Rabatt
+  ok('Rabatt-Spalte ausschalten: Rabatt entfernt, Summen neu berechnet');
 
   // 10. Entwurf wird beim Verlassen automatisch gesichert
   await page.goto(`${BASE}/#/new/invoice`);

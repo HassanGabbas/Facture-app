@@ -6,6 +6,7 @@ import { Store } from '../js/store.js';
 import { _dictForTests, setLang, t, formatDate } from '../js/i18n.js';
 import { DEFAULT_SETTINGS, newDocument, draftFromAi } from '../js/model.js';
 import { documentTotals } from '../js/calc.js';
+import { callGemini } from '../js/gemini.js';
 
 const ENV = { GEMINI_API_KEY: 'sk-test', APP_TOKEN: 'geheim' };
 
@@ -106,6 +107,43 @@ test('Gemini direkt: Aufruf, Fehlerabbildung, Provider-Auswahl', async () => {
   assert.equal(isAiConfigured({ aiMode: 'proxy', aiEndpoint: '', geminiKey: 'k' }), false);
 });
 
+test('Gemini: Ausweichmodelle, Fehlerdetails, Denk-Einstellung', async () => {
+  const okBody = (text) => ({ candidates: [{ content: { parts: [{ text }] } }] });
+  const respond = (status, body) => new Response(JSON.stringify(body), { status });
+
+  // Standardmodell unbekannt (404) -> nächstes Modell wird versucht
+  const tried = [];
+  const out = await callGemini({ apiKey: 'k', system: 's', text: 't', fetchImpl: async (url) => {
+    tried.push(url.match(/models\/([^:]+):/)[1]);
+    return tried.length === 1 ? respond(404, { error: { message: 'model not found' } }) : respond(200, okBody('{"a":1}'));
+  } });
+  assert.equal(out, '{"a":1}');
+  assert.deepEqual(tried, ['gemini-2.5-flash', 'gemini-flash-latest']);
+
+  // Fest eingestelltes Modell: kein Ausweichen, Fehlerdetail enthält Modell und Google-Meldung
+  await assert.rejects(callGemini({ apiKey: 'k', model: 'mein-modell', system: 's', text: 't', fetchImpl: async () => respond(404, { error: { message: 'nicht gefunden' } }) }),
+    (e) => e.status === 502 && /mein-modell: HTTP 404 – nicht gefunden/.test(e.detail));
+
+  // Denk-Einstellung wird für Flash-Modelle gesetzt; bei 400 einmal ohne wiederholt
+  const bodies = [];
+  const out2 = await callGemini({ apiKey: 'k', model: 'gemini-x-flash', system: 's', text: 't', fetchImpl: async (url, init) => {
+    bodies.push(JSON.parse(init.body).generationConfig);
+    return bodies.length === 1 ? respond(400, { error: { message: 'Unknown field thinkingConfig' } }) : respond(200, okBody('ok'));
+  } });
+  assert.equal(out2, 'ok');
+  assert.deepEqual(bodies[0].thinkingConfig, { thinkingBudget: 0 });
+  assert.equal(bodies[1].thinkingConfig, undefined);
+  assert.equal(bodies[0].maxOutputTokens, 8192);
+
+  // Leere Antwort nennt den Grund
+  await assert.rejects(callGemini({ apiKey: 'k', model: 'm', system: 's', text: 't', fetchImpl: async () => respond(200, { candidates: [{ finishReason: 'MAX_TOKENS' }] }) }),
+    (e) => e.code === 'upstream_empty' && /MAX_TOKENS/.test(e.detail));
+
+  // Details werden bis zur App durchgereicht
+  const p = createGeminiProvider({ apiKey: 'k', model: 'm', fetchImpl: async () => respond(500, { error: { message: 'Internal error' } }) });
+  await assert.rejects(extractDocumentData(p, 'x', { today: '2027-01-05', lang: 'de' }), (e) => e.kind === 'server' && /Internal error/.test(e.message));
+});
+
 test('Proxy: CORS nur für erlaubte Herkunft', async () => {
   const env = { ...ENV, ALLOWED_ORIGINS: 'https://app.example' };
   const good = await handleExtract(req({ text: 'x' }, { origin: 'https://app.example' }), env, fakeAnthropic('{}'));
@@ -192,6 +230,18 @@ test('Speicher: Sicherung enthält kein Zugangstoken, Wiederherstellung funktion
   assert.equal(other.listDocuments().length, 1);
   assert.equal(other.getSettings().company.name, 'Meine Firma');
   assert.throws(() => other.importAll({ foo: 1 }), /invalidBackup/);
+});
+
+test('Speicher: Firmendaten ICE/IF, ältere taxId wird übernommen, Kunden-ICE bleibt erhalten', () => {
+  const backing = new MemoryStorage();
+  backing.setItem('ra.settings.v1', JSON.stringify({ company: { name: 'Alt GmbH', taxId: '00123' } }));
+  const s = new Store(backing);
+  const c = s.getSettings().company;
+  assert.equal(c.ice, '00123');
+  assert.equal(c.taxId, undefined);
+  assert.equal(c.ifNr, '');
+  s.upsertCustomer({ name: 'Atlas', address: 'Casa', ice: '999' });
+  assert.equal(s.listCustomers()[0].ice, '999');
 });
 
 test('Speicher: defekte Daten führen nicht zum Absturz', () => {

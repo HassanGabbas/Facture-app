@@ -92,6 +92,17 @@ test('draftFromAi: Beispiel Société Atlas', () => {
   assert.ok(!hasErrors(checkDocument(doc)));
 });
 
+test('Rabatt-Spalte: aus bei neuen Dokumenten, an nur wenn die KI einen Rabatt liefert', () => {
+  assert.equal(newDocument('invoice', settings, TODAY).showDiscount, false);
+  assert.equal(newDocument('invoice', settings, TODAY).customer.ice, '');
+  assert.equal(draftFromAi(aiOk(), settings, TODAY).showDiscount, false);
+  const ai = aiOk();
+  ai.positionen[0].rabattNetto = 50;
+  const doc = draftFromAi(ai, settings, TODAY);
+  assert.equal(doc.showDiscount, true);
+  assert.equal(doc.lines[0].discount, '50');
+});
+
 test('draftFromAi: Summen der KI werden gegengeprüft', () => {
   const ai = aiOk();
   ai.gesamtBrutto = 99999;

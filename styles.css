@@ -142,8 +142,18 @@ main .badge.warn { background: color-mix(in srgb, var(--warn) 18%, transparent);
   position: relative; background: #fff; color: #111; border: 1px solid var(--line); border-radius: 6px;
   padding: 1.2rem; font-size: .9rem; overflow: hidden;
 }
-.sheet-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
+.brand { display: flex; gap: 1rem; margin-bottom: 1.2rem; }
+.brand.right { justify-content: space-between; align-items: center; }
+.brand.above { flex-direction: column; align-items: flex-start; gap: .5rem; }
+.brand-name { font-size: 1.25rem; font-weight: 700; }
+.logo { max-height: 70px; max-width: 45%; object-fit: contain; }
+.brand.above .logo { max-width: 60%; }
+.logo-preview { min-height: 70px; display: flex; align-items: center; background: #fff; border: 1px dashed var(--line); border-radius: 8px; padding: .5rem; }
+.logo-preview img { max-height: 70px; max-width: 100%; object-fit: contain; }
+.docrow { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
 .sheet .meta { text-align: right; }
+.sheet .foot { margin-top: auto; padding-top: .6rem; border-top: 1px solid #ccc; font-size: 7pt; line-height: 1.35; color: #444; text-align: center; }
+.sheet { display: flex; flex-direction: column; }
 .sheet .meta h2 { font-size: 1.5rem; margin: 0 0 .2rem; }
 .sheet .to { margin-bottom: 1.2rem; }
 .sheet .muted { color: #666; }
@@ -155,7 +165,6 @@ main .badge.warn { background: color-mix(in srgb, var(--warn) 18%, transparent);
 .sumtable { margin: .8rem 0 1rem auto; width: min(100%, 360px); }
 .sumtable td { padding: .2rem .3rem; }
 .sumtable tr.strong td { border-top: 2px solid #333; font-weight: 700; font-size: 1.05rem; padding-top: .4rem; }
-.sheet footer { margin-top: 1rem; border-top: 1px solid #ddd; padding-top: .6rem; }
 .wm {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 5rem; font-weight: 800;
   color: rgba(180, 0, 0, .08); transform: rotate(-25deg); pointer-events: none; user-select: none;
@@ -173,6 +182,7 @@ main .badge.warn { background: color-mix(in srgb, var(--warn) 18%, transparent);
   main { padding: 0; max-width: none; }
   .sheet { border: 0; padding: 0; border-radius: 0; font-size: 11pt; overflow: visible; }
   .sheet .items { display: table; overflow: visible; }
+  .sheet { min-height: 262mm; }
   .stack { gap: 0; }
   .items tr, .sumtable tr { break-inside: avoid; }
 }

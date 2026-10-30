@@ -11,7 +11,9 @@ export const DEFAULT_SETTINGS = {
   quotePrefix: 'AN',
   defaultPaymentDays: 14,
   quoteValidDays: 30,
-  company: { name: '', address: '', taxId: '', email: '', phone: '', bank: '' },
+  company: { name: '', address: '', ice: '', ifNr: '', email: '', phone: '', bank: '' },
+  logo: '', // Data-URL des Firmenlogos (verkleinert)
+  logoPosition: 'right', // 'right' = rechts gegenüber dem Firmennamen, 'above' = über dem Firmennamen
   aiMode: 'direct', // 'direct' = Gemini-Schlüssel im Gerät, 'proxy' = eigener Proxy
   geminiKey: '',
   geminiModel: '',
@@ -93,7 +95,8 @@ export function newDocument(type, settings = DEFAULT_SETTINGS, today = todayIso(
     validUntil: isInvoice ? '' : addDays(today, Number(settings.quoteValidDays) || 30),
     paymentTerms: isInvoice ? `${days} Tage nach Rechnungsdatum` : '',
     currency: settings.currency || 'EUR',
-    customer: { name: '', address: '' },
+    customer: { name: '', address: '', ice: '' },
+    showDiscount: false, // Rabatt-Spalte nur auf Wunsch (Dokument-Einstellung)
     lines: [emptyLine(settings)],
     notes: '',
     hints: [],
@@ -210,6 +213,7 @@ export function draftFromAi(ai, settings = DEFAULT_SETTINGS, today = todayIso())
   doc.customer = {
     name: (ai.kunde?.name || '').trim(),
     address: (ai.kunde?.adresse || '').trim(),
+    ice: '',
   };
   if (!doc.customer.name) hints.push({ code: 'customerMissing' });
 
@@ -234,6 +238,8 @@ export function draftFromAi(ai, settings = DEFAULT_SETTINGS, today = todayIso())
     if (taxRate === '') hints.push({ code: 'taxMissing', params: { line: i + 1 } });
     return line;
   });
+  // Rabatt-Spalte nur einschalten, wenn die KI tatsächlich einen Rabatt gefunden hat
+  doc.showDiscount = doc.lines.some((l) => l.discount !== '');
   if (doc.lines.length === 0) {
     doc.lines = [emptyLine(settings)];
     hints.push({ code: 'noLinesFound' });

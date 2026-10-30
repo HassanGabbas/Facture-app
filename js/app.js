@@ -24,6 +24,7 @@ const state = {
   filter: 'all',
   search: '',
   lastRoute: '',
+  logoDraft: undefined, // ungespeichertes Logo in den Einstellungen (undefined = unverändert, '' = entfernt)
 };
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -111,6 +112,7 @@ function render() {
   const leavingEditor = state.lastRoute.startsWith('edit/') && state.lastRoute !== r.raw;
   if (leavingEditor) autosaveIfNeeded();
   state.lastRoute = r.raw;
+  if (r.name !== 'settings') state.logoDraft = undefined;
 
   document.documentElement.lang = getLang();
   renderChrome(r.name);
@@ -258,7 +260,7 @@ function input(f, value, extra = '') {
   return `<input data-f="${esc(f)}" value="${esc(value)}" ${extra}>`;
 }
 
-function lineHtml(line, i, invalid) {
+function lineHtml(line, i, invalid, showDiscount) {
   const L = (f, v, extra = '') => `<input data-line="${i}" data-f="${f}" value="${esc(v)}" ${extra}>`;
   return `
     <div class="line ${invalid ? 'invalid' : ''}" data-i="${i}">
@@ -270,13 +272,15 @@ function lineHtml(line, i, invalid) {
         ${field(t('unit'), L('unit', line.unit, 'autocomplete="off"'))}
         ${field(t('price'), L('price', line.price, 'inputmode="decimal"'))}
       </div>
-      <div class="grid3">
+      ${showDiscount
+        ? `<div class="grid3">
         ${field(t('discount'), L('discount', line.discount, 'inputmode="decimal"'))}
         ${field('', `<select data-line="${i}" data-f="discountType" aria-label="${esc(t('discount'))}">
             <option value="amount" ${line.discountType !== 'percent' ? 'selected' : ''}>${esc(t('discountAmount'))}</option>
             <option value="percent" ${line.discountType === 'percent' ? 'selected' : ''}>${esc(t('discountPercent'))}</option></select>`, 'nolabel')}
         ${field(t('taxRate'), L('taxRate', line.taxRate, 'inputmode="decimal"'))}
-      </div>
+      </div>`
+        : `<div class="grid3">${field(t('taxRate'), L('taxRate', line.taxRate, 'inputmode="decimal"'))}</div>`}
       <div class="line-net">${esc(t('lineNet'))}: <strong data-line-net="${i}"></strong></div>
     </div>`;
 }
@@ -359,6 +363,7 @@ function viewEditor() {
         ${field(t('customerName'), input('customer.name', d.customer.name, 'list="customerList" autocomplete="off"'))}
         <datalist id="customerList">${customers.map((c) => `<option value="${esc(c.name)}"></option>`).join('')}</datalist>
         ${field(t('customerAddress'), `<textarea data-f="customer.address" rows="2">${esc(d.customer.address)}</textarea>`)}
+        ${field(t('customerIce'), input('customer.ice', d.customer.ice || '', 'autocomplete="off" inputmode="numeric"'))}
       </div>
 
       <div class="card">
@@ -372,8 +377,13 @@ function viewEditor() {
       </div>
 
       <div class="card">
+        <h2>${esc(t('docSettings'))}</h2>
+        <label class="check"><input type="checkbox" data-toggle-discount ${d.showDiscount ? 'checked' : ''}> ${esc(t('showDiscount'))}</label>
+      </div>
+
+      <div class="card">
         <h2>${esc(t('sectionLines'))}</h2>
-        <div id="lines">${d.lines.map((l, i) => lineHtml(l, i, badLines.has(i))).join('')}</div>
+        <div id="lines">${d.lines.map((l, i) => lineHtml(l, i, badLines.has(i), d.showDiscount)).join('')}</div>
         <button type="button" class="btn" data-action="add-line">＋ ${esc(t('addLine'))}</button>
       </div>
 
@@ -421,7 +431,7 @@ function sheetHtml(d) {
       const a = lineAmounts(line);
       const qty = formatScaled(parseDecimal(line.qty, QTY_SCALE), QTY_SCALE, 0, L);
       const price = formatScaled(parseDecimal(line.price, PRICE_SCALE), PRICE_SCALE, 2, L);
-      const disc = String(line.discount).trim() === ''
+      const disc = !d.showDiscount || String(line.discount).trim() === ''
         ? ''
         : line.discountType === 'percent'
           ? `${formatScaled(parseDecimal(line.discount, PCT_SCALE), PCT_SCALE, 0, L)} %`
@@ -432,7 +442,7 @@ function sheetHtml(d) {
         <td>${esc(line.name)}</td>
         <td class="r">${esc(qty)} ${esc(line.unit)}</td>
         <td class="r">${esc(price)}</td>
-        <td class="r">${esc(disc)}</td>
+        ${d.showDiscount ? `<td class="r">${esc(disc)}</td>` : ''}
         <td class="r">${esc(rate)}</td>
         <td class="r">${esc(money(a.net, d.currency))}</td></tr>`;
     })
@@ -440,16 +450,25 @@ function sheetHtml(d) {
   const totals = totalsRows(d)
     .map(([label, value, strong]) => `<tr class="${strong ? 'strong' : ''}"><td>${esc(label)}</td><td class="r">${esc(value)}</td></tr>`)
     .join('');
-  const contact = [c.email && `${t('email')}: ${c.email}`, c.phone && `${t('phone')}: ${c.phone}`].filter(Boolean).join(' · ');
+  const logo = typeof settings.logo === 'string' && settings.logo.startsWith('data:image/') ? settings.logo : '';
+  const logoPos = settings.logoPosition === 'above' ? 'above' : 'right';
+  const brand = `<header class="brand ${logoPos}">
+        ${logo && logoPos === 'above' ? `<img class="logo" src="${esc(logo)}" alt="">` : ''}
+        <div class="brand-name">${esc(c.name || '')}</div>
+        ${logo && logoPos === 'right' ? `<img class="logo" src="${esc(logo)}" alt="">` : ''}
+      </header>`;
+  const footLine1 = [c.name, c.address.replace(/\s*\n\s*/g, ', '), c.ice && `${t('ice')}: ${c.ice}`, c.ifNr && `${t('ifNr')}: ${c.ifNr}`, c.email && `${t('email')}: ${c.email}`, c.phone && `${t('phone')}: ${c.phone}`].filter(Boolean).join(' · ');
+  const footLine2 = c.bank ? `${t('bank')}: ${c.bank.replace(/\s*\n\s*/g, ' · ')}` : '';
   return `
     <article class="sheet" id="sheet">
       ${d.status !== 'final' ? `<div class="wm" aria-hidden="true">${esc(t('draftWatermark'))}</div>` : ''}
-      <header class="sheet-head">
-        <div class="from">
-          <strong>${esc(c.name || '')}</strong>
-          <div class="pre">${esc(c.address)}</div>
-          ${contact ? `<div class="small">${esc(contact)}</div>` : ''}
-          ${c.taxId ? `<div class="small">${esc(t('taxId'))}: ${esc(c.taxId)}</div>` : ''}
+      ${brand}
+      <section class="docrow">
+        <div class="to">
+          <div class="small muted">${esc(isInvoice ? t('billTo') : t('quoteFor'))}</div>
+          <strong>${esc(d.customer.name)}</strong>
+          <div class="pre">${esc(d.customer.address)}</div>
+          ${d.customer.ice ? `<div>${esc(t('ice'))}: ${esc(d.customer.ice)}</div>` : ''}
         </div>
         <div class="meta">
           <h2>${esc(typeLabel(d.type))}</h2>
@@ -457,21 +476,15 @@ function sheetHtml(d) {
           <div>${esc(t('issuedOn'))}: ${esc(formatDate(d.date))}</div>
           ${isInvoice ? `<div>${esc(t('dueOn'))}: ${esc(formatDate(d.dueDate) || '–')}</div>` : `<div>${esc(t('validTo'))}: ${esc(formatDate(d.validUntil) || '–')}</div>`}
         </div>
-      </header>
-      <section class="to">
-        <div class="small muted">${esc(isInvoice ? t('billTo') : t('quoteFor'))}</div>
-        <strong>${esc(d.customer.name)}</strong>
-        <div class="pre">${esc(d.customer.address)}</div>
       </section>
       <table class="items">
-        <thead><tr><th>${esc(t('thPos'))}</th><th>${esc(t('thDesc'))}</th><th class="r">${esc(t('thQty'))}</th><th class="r">${esc(t('thPrice'))}</th><th class="r">${esc(t('thDiscount'))}</th><th class="r">${esc(t('thTax'))}</th><th class="r">${esc(t('thNet'))} (${esc(d.currency)})</th></tr></thead>
+        <thead><tr><th>${esc(t('thPos'))}</th><th>${esc(t('thDesc'))}</th><th class="r">${esc(t('thQty'))}</th><th class="r">${esc(t('thPrice'))}</th>${d.showDiscount ? `<th class="r">${esc(t('thDiscount'))}</th>` : ''}<th class="r">${esc(t('thTax'))}</th><th class="r">${esc(t('thNet'))} (${esc(d.currency)})</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       <table class="sumtable"><tbody>${totals}</tbody></table>
-      ${isInvoice && d.paymentTerms ? `<p><strong>${esc(t('terms'))}:</strong> ${esc(d.paymentTerms)}</p>` : ''}
-      ${!isInvoice && d.paymentTerms ? `<p><strong>${esc(t('terms'))}:</strong> ${esc(d.paymentTerms)}</p>` : ''}
+      ${d.paymentTerms ? `<p><strong>${esc(t('terms'))}:</strong> ${esc(d.paymentTerms)}</p>` : ''}
       ${d.notes ? `<p class="pre">${esc(d.notes)}</p>` : ''}
-      ${c.bank ? `<footer class="small"><strong>${esc(t('bank'))}:</strong> <span class="pre">${esc(c.bank)}</span></footer>` : ''}
+      ${footLine1 || footLine2 ? `<footer class="foot">${footLine1 ? `<div>${esc(footLine1)}</div>` : ''}${footLine2 ? `<div>${esc(footLine2)}</div>` : ''}</footer>` : ''}
     </article>`;
 }
 
@@ -522,6 +535,49 @@ function viewDocs() {
 
 // ----- Einstellungen -----
 
+function logoPreviewHtml() {
+  const src = state.logoDraft !== undefined ? state.logoDraft : settings.logo;
+  return src && src.startsWith('data:image/') ? `<img src="${esc(src)}" alt="">` : `<span class="muted small">${esc(t('logoNone'))}</span>`;
+}
+
+/** Verkleinert ein Bild (längste Seite höchstens 600 px) und liefert es als Data-URL. */
+function fileToLogo(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const iw = img.naturalWidth || 300;
+      const ih = img.naturalHeight || 150;
+      const k = Math.min(1, 600 / Math.max(iw, ih));
+      const w = Math.max(1, Math.round(iw * k));
+      const h = Math.max(1, Math.round(ih * k));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      let out = canvas.toDataURL('image/png');
+      if (out.length > 350000) {
+        const c2 = document.createElement('canvas');
+        c2.width = w;
+        c2.height = h;
+        const ctx = c2.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        out = c2.toDataURL('image/jpeg', 0.85);
+      }
+      if (out.length > 700000) reject(new Error('logoTooBig'));
+      else resolve(out);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('logoFailed'));
+    };
+    img.src = url;
+  });
+}
+
 function viewSettings() {
   const c = settings.company;
   const customers = store.listCustomers();
@@ -534,9 +590,19 @@ function viewSettings() {
           <h2>${esc(t('company'))}</h2>
           ${f('companyName', t('companyName'), c.name)}
           ${field(t('companyAddress'), `<textarea name="companyAddress" rows="2">${esc(c.address)}</textarea>`)}
-          ${f('taxId', t('taxId'), c.taxId)}
+          <div class="grid2">${f('ice', t('ice'), c.ice, 'inputmode="numeric" autocomplete="off"')}${f('ifNr', t('ifNr'), c.ifNr, 'inputmode="numeric" autocomplete="off"')}</div>
           <div class="grid2">${f('email', t('email'), c.email, 'type="email"')}${f('phone', t('phone'), c.phone, 'type="tel"')}</div>
           ${field(t('bank'), `<textarea name="bank" rows="2">${esc(c.bank)}</textarea>`)}
+        </div>
+        <div class="card">
+          <h2>${esc(t('logo'))}</h2>
+          <div id="logoPreview" class="logo-preview">${logoPreviewHtml()}</div>
+          <div class="actions">
+            <label class="btn">${esc(t('logoUpload'))}<input type="file" id="logoFile" accept="image/*" hidden></label>
+            <button type="button" class="btn" data-action="logo-remove">${esc(t('logoRemove'))}</button>
+          </div>
+          ${field(t('logoPosition'), `<select name="logoPosition"><option value="right" ${settings.logoPosition !== 'above' ? 'selected' : ''}>${esc(t('logoRight'))}</option><option value="above" ${settings.logoPosition === 'above' ? 'selected' : ''}>${esc(t('logoAbove'))}</option></select>`)}
+          <p class="muted small">${esc(t('logoHelp'))}</p>
         </div>
         <div class="card">
           ${field(t('language'), `<select name="lang">${Object.entries(LANGUAGES).map(([k, v]) => `<option value="${k}" ${k === settings.lang ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>`)}
@@ -589,6 +655,7 @@ function cloneAsNew(doc, type) {
   return {
     ...base,
     customer: { ...doc.customer },
+    showDiscount: Boolean(doc.showDiscount),
     currency: doc.currency,
     notes: doc.notes,
     lines: doc.lines.map((l) => ({ ...l, id: newId('l') })),
@@ -685,7 +752,7 @@ async function runAi() {
     $('#aiRun').disabled = false;
     if (e instanceof AiError) {
       const key = e.kind === 'notConfigured' ? 'aiNotConfigured' : e.kind === 'offline' ? 'aiOffline' : `aiError_${e.kind}`;
-      return setStatus(key, 'error');
+      return setStatus(key, 'error', e.message !== e.kind ? e.message : '');
     }
     return setStatus('aiFailed', 'error');
   }
@@ -718,6 +785,8 @@ function readSettingsForm(form) {
     quoteValidDays: intOr('quoteValidDays', 30),
     invoicePrefix: v('invoicePrefix') || 'RE',
     quotePrefix: v('quotePrefix') || 'AN',
+    logo: state.logoDraft !== undefined ? state.logoDraft : settings.logo || '',
+    logoPosition: v('logoPosition') === 'above' ? 'above' : 'right',
     aiMode: v('aiMode') === 'proxy' ? 'proxy' : 'direct',
     geminiKey: v('geminiKey'),
     geminiModel: v('geminiModel'),
@@ -726,7 +795,8 @@ function readSettingsForm(form) {
     company: {
       name: v('companyName'),
       address: form.elements.companyAddress.value.trim(),
-      taxId: v('taxId'),
+      ice: v('ice'),
+      ifNr: v('ifNr'),
       email: v('email'),
       phone: v('phone'),
       bank: form.elements.bank.value.trim(),
@@ -808,6 +878,10 @@ function onClick(e) {
       store.deleteCustomer(el.dataset.id);
       main().innerHTML = viewSettings();
       break;
+    case 'logo-remove':
+      state.logoDraft = '';
+      $('#logoPreview').innerHTML = logoPreviewHtml();
+      break;
     case 'export':
       download(`rechnungs-app-sicherung-${todayIso()}.json`, JSON.stringify(store.exportAll(), null, 2));
       break;
@@ -832,6 +906,19 @@ function onField(e) {
   }
   const d = state.draft;
   if (!d) return;
+  if (el.dataset.toggleDiscount !== undefined) {
+    if (e.type !== 'change') return;
+    const hasValues = d.lines.some((l) => String(l.discount).trim() !== '');
+    if (!el.checked && hasValues && !window.confirm(t('discountClearConfirm'))) {
+      el.checked = true;
+      return;
+    }
+    d.showDiscount = el.checked;
+    if (!el.checked) d.lines.forEach((l) => { l.discount = ''; l.discountType = 'amount'; });
+    state.dirty = true;
+    rerenderEditorKeepScroll();
+    return;
+  }
   if (el.dataset.reviewed !== undefined) {
     d.reviewed = el.checked;
     state.dirty = true;
@@ -867,6 +954,11 @@ function onField(e) {
       const addr = $('[data-f="customer.address"]');
       if (addr) addr.value = known.address;
     }
+    if (known?.ice && !(d.customer.ice || '').trim()) {
+      d.customer.ice = known.ice;
+      const iceEl = $('[data-f="customer.ice"]');
+      if (iceEl) iceEl.value = known.ice;
+    }
   }
   refreshLive();
 }
@@ -881,12 +973,29 @@ function onSubmit(e) {
     toast(t('storageFull'), 'error');
     return;
   }
+  state.logoDraft = undefined;
   setLang(settings.lang);
   render();
   toast(t('settingsSaved'), 'ok');
 }
 
+async function onLogoChange(e) {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    state.logoDraft = await fileToLogo(file);
+    $('#logoPreview').innerHTML = logoPreviewHtml();
+  } catch (err) {
+    toast(t(err.message === 'logoTooBig' ? 'logoTooBig' : 'logoFailed'), 'error');
+  }
+}
+
 function onFileChange(e) {
+  if (e.target.id === 'logoFile') {
+    onLogoChange(e);
+    return;
+  }
   if (e.target.id !== 'importFile') return;
   const file = e.target.files?.[0];
   if (!file) return;

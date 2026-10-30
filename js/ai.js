@@ -74,11 +74,11 @@ export function createGeminiProvider({ apiKey, model = '', fetchImpl = (...a) =>
         return await callGemini({ apiKey, model, system: buildSystemPrompt(today), text, fetchImpl });
       } catch (e) {
         if (e instanceof AiError) throw e;
-        if (e?.status === 401) throw new AiError('unauthorized');
-        if (e?.status === 429) throw new AiError('rate');
+        if (e?.status === 401) throw new AiError('unauthorized', e.detail);
+        if (e?.status === 429) throw new AiError('rate', e.detail);
         if (e?.status === 504) throw new AiError('timeout');
-        if (e?.status === 502 && e?.code === 'upstream_unreachable') throw new AiError('network');
-        if (e?.status) throw new AiError('server', e.code);
+        if (e?.status === 502 && e?.code === 'upstream_unreachable') throw new AiError('network', e.detail);
+        if (e?.status) throw new AiError('server', e.detail || e.code);
         throw new AiError('network', e?.message);
       }
     },

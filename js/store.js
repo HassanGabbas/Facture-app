@@ -31,7 +31,10 @@ export class Store {
   // ----- Einstellungen -----
   getSettings() {
     const s = this._read(KEYS.settings, {});
-    return { ...DEFAULT_SETTINGS, ...s, company: { ...DEFAULT_SETTINGS.company, ...(s.company || {}) } };
+    const company = { ...DEFAULT_SETTINGS.company, ...(s.company || {}) };
+    if (!company.ice && s.company?.taxId) company.ice = s.company.taxId; // ältere Version
+    delete company.taxId;
+    return { ...DEFAULT_SETTINGS, ...s, company };
   }
 
   saveSettings(settings) {
@@ -82,7 +85,7 @@ export class Store {
     if (!name) return;
     const list = this._read(KEYS.customers, []);
     const i = list.findIndex((c) => c.name.toLowerCase() === name.toLowerCase());
-    const entry = { id: i === -1 ? newId('c') : list[i].id, name, address: (customer.address || '').trim() };
+    const entry = { id: i === -1 ? newId('c') : list[i].id, name, address: (customer.address || '').trim(), ice: (customer.ice || '').trim() };
     if (i === -1) list.push(entry);
     else list[i] = entry;
     this._write(KEYS.customers, list);
