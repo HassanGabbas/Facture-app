@@ -1,7 +1,7 @@
 // Ende-zu-Ende-Test im echten Browser (Chromium via Playwright). Nicht Teil von "npm test".
 //   node tests/e2e/ui.e2e.mjs            (Playwright muss installiert sein: npm i -D playwright)
 // Der KI-Proxy wird im Browser per Route-Mock ersetzt; der Proxy selbst ist in tests/integration.test.js abgedeckt.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
@@ -111,6 +111,7 @@ try {
   // 6. Korrigieren, bestätigen, fertigstellen
   await page.fill('[data-line="1"][data-f="price"]', '500');
   await page.check('[data-reviewed]');
+  await page.fill('[data-f="extraInfo"]', 'Projekt: Minifoot-Feld\nLieferung in 2 Wochen');
   const totals = await page.textContent('#totals');
   assert.match(totals, /13\.820,00/);
   assert.match(totals, /2\.764,00/);
@@ -123,6 +124,18 @@ try {
   assert.match(sheet, /16\.584,00/);
   assert.match(sheet, /Gazon Pro SARL/);
   assert.equal(await page.$('.wm'), null);
+  // Aufbau: links Rechnung/Nummer/Datum, rechts Kunde + ICE; zusätzliche Informationen über der Tabelle
+  assert.deepEqual(await page.$eval('.docrow', (el) => [...el.children].map((c) => c.className)), ['meta', 'to']);
+  const metaBox = await page.$eval('.docrow .meta', (el) => el.getBoundingClientRect().left);
+  const toBox = await page.$eval('.docrow .to', (el) => el.getBoundingClientRect().left);
+  assert.ok(metaBox < toBox, 'Rechnung links, Kunde rechts');
+  assert.match(await page.textContent('.docrow .meta'), /Rechnung.*RE-\d{4}-0001.*Datum/s);
+  assert.match(await page.textContent('.docrow .to'), /^\s*Kunde\s*Société Atlas/);
+  assert.doesNotMatch(await page.textContent('.docrow .to'), /Rechnung an/);
+  const extraTop = await page.$eval('.extra', (el) => el.getBoundingClientRect().top);
+  const tableTop = await page.$eval('.items', (el) => el.getBoundingClientRect().top);
+  assert.ok(extraTop < tableTop, 'Zusätzliche Informationen über der Tabelle');
+  assert.match(await page.textContent('.extra'), /Zusätzliche Informationen :.*Minifoot-Feld/s);
   // Kopf: nur Name + Logo rechts, keine ICE/IF/Adresse oben
   const headText = await page.textContent('.brand');
   assert.match(headText, /Gazon Pro SARL/);
@@ -146,6 +159,15 @@ try {
   // 7. PDF aus der Druckansicht
   await page.pdf({ path: join(OUT, 'rechnung.pdf'), format: 'A4', printBackground: true });
   assert.ok(statSync(join(OUT, 'rechnung.pdf')).size > 5000);
+  // Fußnote: Abstand des untersten Textes zum Blattrand ≈ 1 cm (falls pdftotext vorhanden ist)
+  const bbox = spawnSync('pdftotext', ['-bbox', join(OUT, 'rechnung.pdf'), '-'], { encoding: 'utf8' });
+  if (bbox.status === 0) {
+    const pageH = parseFloat(/<page width="[\d.]+" height="([\d.]+)"/.exec(bbox.stdout)[1]);
+    const lowest = Math.max(...[...bbox.stdout.matchAll(/yMax="([\d.]+)"/g)].map((m) => parseFloat(m[1])));
+    const cm = (pageH - lowest) / 28.3465;
+    assert.ok(cm > 0.9 && cm < 1.1, `Fußnote ${cm.toFixed(2)} cm vom Blattrand`);
+    assert.equal((bbox.stdout.match(/<page /g) || []).length, 1, 'Rechnung passt auf eine Seite');
+  }
   ok('PDF aus Druckansicht erzeugt');
 
   // 8. Persistenz nach Neuladen
@@ -178,6 +200,7 @@ try {
   assert.match(await page.textContent('#sheet'), /AN-\d{4}-0001/);
   assert.match(await page.textContent('#sheet'), /Gültig bis/);
   assert.match(await page.textContent('.docrow'), /ICE: 555000111/);
+  assert.equal(await page.$('.extra'), null); // ohne Eingabe keine Zeile „Zusätzliche Informationen“
   assert.match(await page.textContent('.items thead'), /Rabatt/);
   assert.match(await page.textContent('.items tbody'), /10 %/);
   ok('Angebot von Hand: Rabatt %, Standardsteuersatz, Nummer AN-…-0001, ohne Fälligkeitsdatum');

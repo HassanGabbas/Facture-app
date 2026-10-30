@@ -97,6 +97,7 @@ export function newDocument(type, settings = DEFAULT_SETTINGS, today = todayIso(
     currency: settings.currency || 'EUR',
     customer: { name: '', address: '', ice: '' },
     showDiscount: false, // Rabatt-Spalte nur auf Wunsch (Dokument-Einstellung)
+    extraInfo: '', // „Zusätzliche Informationen“ über der Positionstabelle (nur wenn ausgefüllt)
     lines: [emptyLine(settings)],
     notes: '',
     hints: [],

@@ -382,6 +382,11 @@ function viewEditor() {
       </div>
 
       <div class="card">
+        ${field(t('extraInfo'), `<textarea data-f="extraInfo" rows="3">${esc(d.extraInfo || '')}</textarea>`)}
+        <p class="muted small">${esc(t('extraInfoHelp'))}</p>
+      </div>
+
+      <div class="card">
         <h2>${esc(t('sectionLines'))}</h2>
         <div id="lines">${d.lines.map((l, i) => lineHtml(l, i, badLines.has(i), d.showDiscount)).join('')}</div>
         <button type="button" class="btn" data-action="add-line">＋ ${esc(t('addLine'))}</button>
@@ -464,19 +469,20 @@ function sheetHtml(d) {
       ${d.status !== 'final' ? `<div class="wm" aria-hidden="true">${esc(t('draftWatermark'))}</div>` : ''}
       ${brand}
       <section class="docrow">
-        <div class="to">
-          <div class="small muted">${esc(isInvoice ? t('billTo') : t('quoteFor'))}</div>
-          <strong>${esc(d.customer.name)}</strong>
-          <div class="pre">${esc(d.customer.address)}</div>
-          ${d.customer.ice ? `<div>${esc(t('ice'))}: ${esc(d.customer.ice)}</div>` : ''}
-        </div>
         <div class="meta">
           <h2>${esc(typeLabel(d.type))}</h2>
           ${d.number ? `<div><strong>${esc(d.number)}</strong></div>` : ''}
           <div>${esc(t('issuedOn'))}: ${esc(formatDate(d.date))}</div>
           ${isInvoice ? `<div>${esc(t('dueOn'))}: ${esc(formatDate(d.dueDate) || '–')}</div>` : `<div>${esc(t('validTo'))}: ${esc(formatDate(d.validUntil) || '–')}</div>`}
         </div>
+        <div class="to">
+          <div class="small muted">${esc(t('client'))}</div>
+          <strong>${esc(d.customer.name)}</strong>
+          <div class="pre">${esc(d.customer.address)}</div>
+          ${d.customer.ice ? `<div>${esc(t('ice'))}: ${esc(d.customer.ice)}</div>` : ''}
+        </div>
       </section>
+      ${d.extraInfo && d.extraInfo.trim() ? `<div class="extra"><strong>${esc(t('extraInfo'))} :</strong> <span class="pre">${esc(d.extraInfo.trim())}</span></div>` : ''}
       <table class="items">
         <thead><tr><th>${esc(t('thPos'))}</th><th>${esc(t('thDesc'))}</th><th class="r">${esc(t('thQty'))}</th><th class="r">${esc(t('thPrice'))}</th>${d.showDiscount ? `<th class="r">${esc(t('thDiscount'))}</th>` : ''}<th class="r">${esc(t('thTax'))}</th><th class="r">${esc(t('thNet'))} (${esc(d.currency)})</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -656,6 +662,7 @@ function cloneAsNew(doc, type) {
     ...base,
     customer: { ...doc.customer },
     showDiscount: Boolean(doc.showDiscount),
+    extraInfo: doc.extraInfo || '',
     currency: doc.currency,
     notes: doc.notes,
     lines: doc.lines.map((l) => ({ ...l, id: newId('l') })),

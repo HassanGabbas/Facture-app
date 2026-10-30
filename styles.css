@@ -151,11 +151,12 @@ main .badge.warn { background: color-mix(in srgb, var(--warn) 18%, transparent);
 .logo-preview { min-height: 70px; display: flex; align-items: center; background: #fff; border: 1px dashed var(--line); border-radius: 8px; padding: .5rem; }
 .logo-preview img { max-height: 70px; max-width: 100%; object-fit: contain; }
 .docrow { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
-.sheet .meta { text-align: right; }
+.sheet .meta { text-align: left; }
+.sheet .to { margin-left: auto; min-width: 40%; text-align: left; }
+.extra { margin-bottom: 1rem; }
 .sheet .foot { margin-top: auto; padding-top: .6rem; border-top: 1px solid #ccc; font-size: 7pt; line-height: 1.35; color: #444; text-align: center; }
 .sheet { display: flex; flex-direction: column; }
 .sheet .meta h2 { font-size: 1.5rem; margin: 0 0 .2rem; }
-.sheet .to { margin-bottom: 1.2rem; }
 .sheet .muted { color: #666; }
 .items, .sumtable { width: 100%; border-collapse: collapse; }
 .items th, .items td { padding: .35rem .3rem; border-bottom: 1px solid #ddd; vertical-align: top; text-align: left; }
@@ -176,13 +177,13 @@ main .badge.warn { background: color-mix(in srgb, var(--warn) 18%, transparent);
 }
 
 @media print {
-  @page { size: A4; margin: 14mm; }
+  @page { size: A4; margin: 14mm 14mm 9mm 14mm; } /* Fußnote endet 1 cm über dem Blattrand */
   body { background: #fff; }
   .no-print, .topbar, .nav, .toast { display: none !important; }
   main { padding: 0; max-width: none; }
   .sheet { border: 0; padding: 0; border-radius: 0; font-size: 11pt; overflow: visible; }
   .sheet .items { display: table; overflow: visible; }
-  .sheet { min-height: 262mm; }
+  .sheet { min-height: 273mm; }
   .stack { gap: 0; }
   .items tr, .sumtable tr { break-inside: avoid; }
 }
